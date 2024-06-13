@@ -173,3 +173,48 @@ func (p *Postgres) FindProfilesByName(ctx context.Context, tenantID uuid.UUID, q
 	}
 	return
 }
+
+func (p *Postgres) FindNinProfile(ctx context.Context, tenantID uuid.UUID, nin string) (prs []*profile.Profile, err error) {
+	_, span := p.tracer.Start(ctx, "findNinProfiles", trace.WithAttributes(
+		attribute.Stringer("tenantID", tenantID),
+	))
+	defer span.End()
+
+	// we don't need the return value since we are using the Filter func to efficiently convert the item
+	_, err = p.q.FindProfilesByNin(ctx,
+		sqlc.FindProfilesByNinParams{
+			TenantID: tenantID,
+			NinBidx:  sqlval.BIDXString(p.bidxFunc(tenantID), nin).ForRead(pqByteArray),
+		},
+		func(fpbnr *sqlc.FindProfilesByNinRow) {
+			// initiate so that we can decrypt
+			fpbnr.Nin = sqlval.AEADString(p.aeadFunc(tenantID), "", fpbnr.ID[:])
+			fpbnr.Name = sqlval.AEADString(p.aeadFunc(tenantID), "", fpbnr.ID[:])
+			fpbnr.Phone = sqlval.AEADString(p.aeadFunc(tenantID), "", fpbnr.ID[:])
+			fpbnr.Email = sqlval.AEADString(p.aeadFunc(tenantID), "", fpbnr.ID[:])
+			fpbnr.Dob = sqlval.AEADTime(p.aeadFunc(tenantID), time.Time{}, fpbnr.ID[:])
+		},
+		func(fpbnr sqlc.FindProfilesByNinRow) (bool, error) {
+			// due to bloom filter, we need to verify if the name match
+			if fpbnr.Name.To() != nin {
+				return false, nil
+			}
+
+			prs = append(prs,
+				&profile.Profile{
+					ID:       fpbnr.ID,
+					TenantID: tenantID,
+					NIN:      fpbnr.Nin.To(),
+					Name:     fpbnr.Name.To(),
+					Email:    fpbnr.Email.To(),
+					Phone:    fpbnr.Phone.To(),
+					DOB:      fpbnr.Dob.To(),
+				})
+			return false, nil
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("fail to query profile by name: %w", err)
+	}
+	return
+}

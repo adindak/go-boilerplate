@@ -67,6 +67,32 @@ paths:
                                 $ref: '#/components/schemas/Profile'
                 "404":
                     description: not found
+    /tenants/{tenant-id}/search-by-nin/{nin}:
+        get:
+            security:
+                - {}
+            summary: "search profile"
+            operationId: "SearchProfile"
+            parameters:
+                - name: tenant-id
+                  required: true
+                  in: path
+                  schema:
+                    $ref: '#/components/schemas/UUID'
+                - name: nin
+                  in: path
+                  required: true
+                  schema:
+                    $ref: '#/components/schemas/ZeroableString'
+            responses:
+                "200":
+                    description: "success"
+                    content:
+                        "application/json":
+                            schema:
+                                $ref: '#/components/schemas/Profile'
+                "404":
+                    description: not found
 components:
     schemas:
         UUID:

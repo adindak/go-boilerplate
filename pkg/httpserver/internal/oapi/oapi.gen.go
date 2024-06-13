@@ -68,6 +68,9 @@ type ServerInterface interface {
 	// get profile
 	// (GET /tenants/{tenant-id}/profiles/{profile-id})
 	GetProfile(ctx echo.Context, tenantId UUID, profileId UUID) error
+	// search profile
+	// (GET /tenants/{tenant-id}/search-by-nin/{nin})
+	SearchProfile(ctx echo.Context, tenantId UUID, nin ZeroableString) error
 }
 
 // ServerInterfaceWrapper converts echo contexts to parameters.
@@ -124,6 +127,30 @@ func (w *ServerInterfaceWrapper) GetProfile(ctx echo.Context) error {
 	return err
 }
 
+// SearchProfile converts echo context to params.
+func (w *ServerInterfaceWrapper) SearchProfile(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "tenant-id" -------------
+	var tenantId UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tenant-id", ctx.Param("tenant-id"), &tenantId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter tenant-id: %s", err))
+	}
+
+	// ------------- Path parameter "nin" -------------
+	var nin ZeroableString
+
+	err = runtime.BindStyledParameterWithOptions("simple", "nin", ctx.Param("nin"), &nin, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter nin: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.SearchProfile(ctx, tenantId, nin)
+	return err
+}
+
 // This is a simple interface which specifies echo.Route addition functions which
 // are present on both echo.Echo and echo.Group, since we want to allow using
 // either of them for path registration
@@ -154,6 +181,7 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 
 	router.POST(baseURL+"/tenants/:tenant-id/profiles", wrapper.PostProfile)
 	router.GET(baseURL+"/tenants/:tenant-id/profiles/:profile-id", wrapper.GetProfile)
+	router.GET(baseURL+"/tenants/:tenant-id/search-by-nin/:nin", wrapper.SearchProfile)
 
 }
 
@@ -210,6 +238,32 @@ func (response GetProfile404Response) VisitGetProfileResponse(w http.ResponseWri
 	return nil
 }
 
+type SearchProfileRequestObject struct {
+	TenantId UUID           `json:"tenant-id"`
+	Nin      ZeroableString `json:"nin"`
+}
+
+type SearchProfileResponseObject interface {
+	VisitSearchProfileResponse(w http.ResponseWriter) error
+}
+
+type SearchProfile200JSONResponse Profile
+
+func (response SearchProfile200JSONResponse) VisitSearchProfileResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type SearchProfile404Response struct {
+}
+
+func (response SearchProfile404Response) VisitSearchProfileResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// create profile
@@ -218,6 +272,9 @@ type StrictServerInterface interface {
 	// get profile
 	// (GET /tenants/{tenant-id}/profiles/{profile-id})
 	GetProfile(ctx context.Context, request GetProfileRequestObject) (GetProfileResponseObject, error)
+	// search profile
+	// (GET /tenants/{tenant-id}/search-by-nin/{nin})
+	SearchProfile(ctx context.Context, request SearchProfileRequestObject) (SearchProfileResponseObject, error)
 }
 
 type StrictHandlerFunc = strictecho.StrictEchoHandlerFunc
@@ -290,19 +347,46 @@ func (sh *strictHandler) GetProfile(ctx echo.Context, tenantId UUID, profileId U
 	return nil
 }
 
+// SearchProfile operation middleware
+func (sh *strictHandler) SearchProfile(ctx echo.Context, tenantId UUID, nin ZeroableString) error {
+	var request SearchProfileRequestObject
+
+	request.TenantId = tenantId
+	request.Nin = nin
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.SearchProfile(ctx.Request().Context(), request.(SearchProfileRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SearchProfile")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(SearchProfileResponseObject); ok {
+		return validResponse.VisitSearchProfileResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/9RUTW/bMAz9KwG3o1ynaw6DbvsAhtwKbL1sKAbFZhJtsqhKdLHA8H8fKDtNvQ5r2g77",
-	"OEWgyfdIvhd2UFETyKPnBLqDVG2xMfn5JqJhPI+0tg4lECIFjGwxf65pJT/PI65Bw7PygFOOIOVHjGRW",
-	"Dj/YBqFXgI2x7tii9xyt30iZNw0+osr6hxeFLfkHc/W9gn9gTba+r+biYvn2f1ioAkZvPH8+diRRIL90",
-	"B2uKjWHQ0La2BgW8Cwga0oCt4FuxoUKCRfpqQ0GBLXnjikDWM0bQHFvsFfzQlO6ejJT1vd1hbRgLluhj",
-	"25TBrV+TwDpboU+ZYRAYlpLpjQMFbXSgYcscdFk6qozbUuK8asvi272DZ6/Ol6DgGmOy5EHD6cn8ZC6J",
-	"FNCbYEHDWQ4pCIa32eTloFcqu+FR2LovwwCYE4KQ6U4wopFJlrVQUuL9H0fQommQMSbQnzoQt2UG2BsW",
-	"bsBBQcSr1kash0Wo8XAdaRc1wl+1GHcH/GvjrGgCt+FGYVZEDo2Hvr8cyDHxa6p3klKRZ/R5QBOCs1Ue",
-	"sfySyB9u6n2tTc9tVnY6Yw6kQD4NO30xP/1t5BPaGlMVbTacOLKtKkxJHLCYz/NJm3xfmXo27kM2Cwmr",
-	"NlreiYiyq9Q2jYk70FDlCWfhhkv92jhlN74kKsQb/ImJ3uHf9dAU/tDxU/Ev78g9/+NyL+7K7Ylna2p9",
-	"fY/YG+RbSufUeL3X5XCNki73euuXi8UZyF6nn2+u1Zhw2X8PAAD//3kfZ7S1CAAA",
+	"H4sIAAAAAAAC/9RWTW/bMAz9KwG3o12naw6DbvsAhtwKdL1sKAbFZhJtNqlKdLHA8H8fKDtNs25LP4at",
+	"PUWgqPdIvmcpHZTceCYkiWA6iOUaG5uW7wJawdPAS1ejBnxgj0Ecpu2KF/rzMuASDLwodjjFCFJ8wsB2",
+	"UeNH1yD0GWBjXX3XQ2cSHK30GNkGH3DK0f0P+TXTvbn6PoMnMCZXHTpzfj5//xwGmoEgWZIvd21JFUgr",
+	"08GSQ2MFDLStqyAD2XgEA3HAzuB7vuJcg3n85nzOXhyTrXPPjgQDGAkt9hn8VJTpHo2U9L1ZYWUFc9Ho",
+	"Q8vUxh0tWWFrVyLFxDAIDHPNJFtDBm2owcBaxJuiqLm09ZqjpFE7Ud9uHTx5czqHDK4wRMcEBo6PpkdT",
+	"TWSPZL0DAycplIG3sk4mLwa9YtENi9xVfeEHwJTglcx0ihGsdjKvlJKjbD8cRQu2QcEQwXzuQN2WGGBr",
+	"WLgGhwwCXrYuYDUMIhsvrjvaJRvhL1sMmx3+la2dagI34UZhFsw1WoK+vxjIMcpbrjaaUjIJUmrQel+7",
+	"MrVYfI1Muzv1UGn7121Sdr/HFIieKQ4zfTU9/mvke7QVxjK4ZDh1ZFuWGKM6YDadpittb39hq8k4D50s",
+	"RCzb4GSjIuqsYts0NmzAQJk6nPhrruzPxim6caVRJV7hL0z0Af+vh/bhdxU/Fv/iltzTfy737LbcxDJZ",
+	"ckvVAbFXKIeVjmhDuc4Xm5wcFR05+r3OZyn3CUmt7+FDgW/9hXjmag9C3hA8ZYerrTq75yeaYvuBm9ez",
+	"2QnodPe3r5+nMeGi/xEAAP//WDpIcqYKAAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

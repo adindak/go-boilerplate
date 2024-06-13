@@ -197,7 +197,6 @@ func (p *Postgres) watchOuboxes(ctx context.Context) (err error) {
 		return fmt.Errorf("fail to listen for outbox notification :%w", err)
 	}
 	defer l.Close()
-
 	var last *Outbox
 	for {
 		timer := time.NewTimer(time.Minute)

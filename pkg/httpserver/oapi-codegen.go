@@ -3,6 +3,8 @@
 package httpserver
 
 import (
+	"context"
+
 	"github.com/telkomindonesia/go-boilerplate/pkg/httpserver/internal/oapi"
 )
 
@@ -10,4 +12,9 @@ var _ oapi.StrictServerInterface = oapiServerImplementation{}
 
 type oapiServerImplementation struct {
 	h *HTTPServer
+}
+
+// FindNinProfile implements oapi.StrictServerInterface.
+func (s oapiServerImplementation) FindNinProfile(ctx context.Context, request oapi.FindNinRequestObject) (oapi.FindNinResponseObject, error) {
+	panic("unimplemented")
 }

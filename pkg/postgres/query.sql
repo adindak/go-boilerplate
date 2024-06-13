@@ -23,6 +23,14 @@ FROM
 WHERE 
     tenant_id = $1 and name_bidx = ANY($2);
 
+-- name: FindProfilesByNin :many
+SELECT 
+    id, nin, name, phone, email, dob 
+FROM 
+    profile 
+WHERE 
+    tenant_id = $1 AND nin_bidx = ANY($2);
+
 -- name: FindTextHeap :many
 SELECT 
     content 

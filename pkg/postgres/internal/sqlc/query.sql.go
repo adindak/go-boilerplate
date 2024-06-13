@@ -136,6 +136,82 @@ func (q *Queries) FindProfilesByName(ctx context.Context, arg FindProfilesByName
 	return items, nil
 }
 
+const findProfilesByNin = `-- name: FindProfilesByNin :many
+SELECT 
+    id, nin, name, phone, email, dob 
+FROM 
+    profile 
+WHERE 
+    tenant_id = $1 AND nin_bidx = ANY($2)
+`
+
+type FindProfilesByNinParams struct {
+	TenantID uuid.UUID
+	NinBidx  types.BIDXString
+}
+
+type FindProfilesByNinRow struct {
+	ID    uuid.UUID
+	Nin   types.AEADString
+	Name  types.AEADString
+	Phone types.AEADString
+	Email types.AEADString
+	Dob   types.AEADTime
+}
+
+// FindProfilesByNin
+//
+//	SELECT
+//	    id, nin, name, phone, email, dob
+//	FROM
+//	    profile
+//	WHERE
+//	    tenant_id = $1 AND nin_bidx = ANY($2)
+func (q *Queries) FindProfilesByNin(ctx context.Context, arg FindProfilesByNinParams, iOptionalInitFunc func(*FindProfilesByNinRow), iOptionalFilterFunc func(FindProfilesByNinRow) (bool, error)) ([]FindProfilesByNinRow, error) {
+	rows, err := q.db.QueryContext(ctx, findProfilesByNin, arg.TenantID, arg.NinBidx)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindProfilesByNinRow
+	for rows.Next() {
+		var i FindProfilesByNinRow
+		if iOptionalInitFunc != nil {
+			iOptionalInitFunc(&i)
+		}
+
+		if err := rows.Scan(
+			&i.ID,
+			&i.Nin,
+			&i.Name,
+			&i.Phone,
+			&i.Email,
+			&i.Dob,
+		); err != nil {
+			return nil, err
+		}
+
+		if iOptionalFilterFunc != nil {
+			add, err := iOptionalFilterFunc(i)
+			if err != nil {
+				return nil, err
+			}
+			if !add {
+				continue
+			}
+		}
+
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const findTextHeap = `-- name: FindTextHeap :many
 SELECT 
     content 
